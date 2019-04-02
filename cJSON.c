@@ -146,6 +146,57 @@ static void * CJSON_CDECL internal_realloc(void *pointer, size_t size)
 
 static internal_hooks global_hooks = { internal_malloc, internal_free, internal_realloc };
 
+static char* cJSON_strndup(const char* string, size_t n)
+{
+    char *output_string = (char *)cJSON_malloc(n+1);
+    if(!output_string)
+        return NULL;
+    output_string[n] = '\0';
+    strncpy(output_string,string,n);
+    return output_string;
+}
+
+static void remove_comments(char *string,const char *start_token,const char *end_token)
+{
+    int in_string=  0,escaped = 0;
+    size_t i;
+    char *ptr = NULL,current_char='\0';
+    size_t start_token_len = strlen(start_token);
+    size_t end_token_len = strlen(end_token);
+
+    if(start_token_len == 0 || end_token_len == 0)
+        return;
+    while((current_char = *string) != '\0')
+    {
+        if(current_char == '\\' && !escaped)
+        {
+            escaped = 1;
+            string++;
+            continue;
+        }
+        else if(current_char == '\"' && !escaped)
+        {
+            in_string = !in_string;
+        }
+        else if(!in_string && strncmp(string, start_token,start_token_len) == 0)
+        {
+            for( i = 0;i < start_token_len;i++)
+            {
+                string[i] = ' ';
+            }
+            string = string + start_token_len;
+            ptr = strstr(string, end_token);
+            if(!ptr)
+                return;
+            for(i=0;i<(ptr-string)+end_token_len;i++)
+                string[i]=' ';
+            string=ptr+end_token_len -1;
+        }
+        escaped = 0;
+        string++;
+    }
+}
+
 static unsigned char* cJSON_strdup(const unsigned char* string, const internal_hooks * const hooks)
 {
     size_t length = 0;
@@ -1005,14 +1056,33 @@ CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return
     /* reset error position */
     global_error.json = NULL;
     global_error.position = 0;
+    
+    char *string_mutable_copy = NULL, *string_mutable_copy_ptr = NULL;
+    string_mutable_copy = cJSON_strndup(value,strlen(value));
+    if(string_mutable_copy == NULL)
+        goto fail;
 
-    if (value == NULL)
+    remove_comments(string_mutable_copy,"/*","*/");
+    remove_comments(string_mutable_copy,"//","\n");
+    string_mutable_copy_ptr = string_mutable_copy;
+    
+    while(isspace(*string_mutable_copy_ptr))
+    {
+       string_mutable_copy_ptr++;
+    }
+    if(*string_mutable_copy_ptr != '{' && *string_mutable_copy_ptr !='[')
+    {
+        cJSON_free(string_mutable_copy);
+        goto fail;
+    }
+
+    if (string_mutable_copy_ptr == NULL)
     {
         goto fail;
     }
 
-    buffer.content = (const unsigned char*)value;
-    buffer.length = strlen((const char*)value) + sizeof("");
+    buffer.content = (const unsigned char*)string_mutable_copy_ptr ;
+    buffer.length = strlen((const char*)string_mutable_copy_ptr ) + sizeof("");
     buffer.offset = 0;
     buffer.hooks = global_hooks;
 
