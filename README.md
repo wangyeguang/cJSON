@@ -1,6 +1,6 @@
 # cJSON
-
-Ultralightweight JSON parser in ANSI C.
+支持读取带有注释的JSON文件。
+在ANSI C Ultralightweight JSON解析器。
 
 ## Table of contents
 * [License](#license)
